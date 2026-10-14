@@ -1,0 +1,1250 @@
+{
+  "info": {
+    "name": "StyleHub API Testing",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "IMPORT: Postman > Import > select this JSON. No export is needed. Start FastAPI at http://127.0.0.1:8000. Use the desktop app or desktop agent for localhost. Do not select an environment overriding these variables.\nRUN: Run only folder 01 - Core API checks in order, one iteration. It creates a fresh test account automatically; you do not need to enter your personal password. Requires seeded products and one product with >=3 stock. Creates then cancels a test order and restores stock. Do not run alongside other stock-changing tests. Check Test Results for actual results; this file is not evidence of completed testing.\nOPTIONAL PAYMENTS: After Core, manually send P1-P4 in folder 02. This reserves one unit and creates an unpaid Stripe test PaymentIntent. Keep stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled --forward-to http://127.0.0.1:8000/api/payments/webhook running with its signing secret configured in backend .env. Use stripe payment_intents confirm YOUR_PI_ID --payment-method=pm_card_visa for success, or --payment-method=pm_card_chargeDeclined for failure, then retry visa on the same intent. Alternatively stripe payment_intents cancel YOUR_PI_ID releases stock via webhook. Send P5 after the event to inspect order state. Do not leave a pending reservation unintentionally. No Stripe secret is stored in this file.\nSHARE: Downloaded original JSON has no personal credentials/tokens. Runtime-generated test credentials and token stay in Postman. Keep the original file for GitHub submission; do not share screenshots of tokens or client_secret. Backend user-isolation and frontend checks are separate from this collection."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "product_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "size",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "unit_price_paise",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "stock_before",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cart_item_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "checkout_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "order_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payment_checkout_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payment_intent_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Core API checks (run this folder)",
+      "item": [
+        {
+          "name": "01 Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"API healthy\",()=>pm.expect(pm.response.json().status).to.equal(\"ok\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "02 Register fresh test user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/register",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Demo\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id=pm.variables.replaceIn(\"{{$guid}}\");",
+                  "pm.collectionVariables.set(\"email\", \"stylehub-\"+id+\"@example.com\");",
+                  "pm.collectionVariables.set(\"password\", \"Demo9!\"+id);",
+                  "pm.collectionVariables.unset(\"access_token\");",
+                  "pm.collectionVariables.unset(\"order_id\");",
+                  "pm.collectionVariables.unset(\"cart_item_id\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "if(pm.response.code===201){pm.collectionVariables.set(\"user_id\",pm.response.json().id);pm.test(\"Hash excluded\",()=>pm.expect(pm.response.json()).not.to.have.property(\"hashed_password\"));}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "03 Reject duplicate email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/register",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Demo\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "04 Reject short password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/register",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Demo\",\n  \"email\": \"{{email}}\",\n  \"password\": \"abc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "05 Reject wrong password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"Incorrect9!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "06 Login and save token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  " const d=pm.response.json();",
+                  " pm.test(\"JWT and bearer type\",()=>{pm.expect(d.access_token).to.be.a(\"string\").and.not.empty;pm.expect(d.token_type).to.equal(\"bearer\");});",
+                  " pm.collectionVariables.set(\"access_token\",d.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "07 Current user",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/me",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const d=pm.response.json();pm.test(\"Password excluded\",()=>{pm.expect(d).not.to.have.property(\"hashed_password\");pm.expect(d).not.to.have.property(\"password\");});}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "08 Reject missing token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/me",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "09 Reject invalid token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer invalid-test-token"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/me",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "10 Select available product automatically",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/products?limit=100",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const d=pm.response.json();const p=d.find(p=>p.stock>=3&&p.sizes.length&&p.price_paise>0);pm.test(\"Available product exists\",()=>pm.expect(p).to.exist);if(p){pm.collectionVariables.set(\"product_id\",p.id);pm.collectionVariables.set(\"size\",p.sizes[0]);pm.collectionVariables.set(\"unit_price_paise\",p.price_paise);pm.collectionVariables.set(\"stock_before\",p.stock);}}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "11 Product details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/products/{{product_id}}",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "12 Category filter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/products?category=men&limit=100",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Men only\",()=>pm.response.json().forEach(p=>pm.expect(p.category).to.equal(\"men\")));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "13 Search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/products?search=shirt&limit=100",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Search matches\",()=>pm.response.json().forEach(p=>pm.expect((p.name+\" \"+p.description).toLowerCase()).to.include(\"shirt\")));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "14 Price ascending",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/products?sort=price_asc&limit=100",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const prices=pm.response.json().map(p=>p.price_paise);pm.test(\"Ascending prices\",()=>pm.expect(prices).to.eql([...prices].sort((a,b)=>a-b)));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "15 Missing product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/products/2147483647",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "16 Reject invalid page size",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/products?limit=0",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "17 Empty test-user cart",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/cart",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const d=pm.response.json();pm.test(\"Correct cart totals\",()=>{pm.expect(d.total_paise).to.equal(d.items.reduce((s,i)=>s+i.subtotal_paise,0));pm.expect(d.total_quantity).to.equal(d.items.reduce((s,i)=>s+i.quantity,0));d.items.forEach(i=>pm.expect(i.subtotal_paise).to.equal(i.product.price_paise*i.quantity));});if(d.items.length)pm.collectionVariables.set(\"cart_item_id\",d.items[0].id);}",
+                  "pm.test(\"Empty cart\",()=>pm.expect(pm.response.json().items).to.have.lengthOf(0));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "18 Add item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/cart/items",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": {{product_id}},\n  \"size\": \"{{size}}\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const d=pm.response.json();pm.test(\"Correct cart totals\",()=>{pm.expect(d.total_paise).to.equal(d.items.reduce((s,i)=>s+i.subtotal_paise,0));pm.expect(d.total_quantity).to.equal(d.items.reduce((s,i)=>s+i.quantity,0));d.items.forEach(i=>pm.expect(i.subtotal_paise).to.equal(i.product.price_paise*i.quantity));});if(d.items.length)pm.collectionVariables.set(\"cart_item_id\",d.items[0].id);}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "19 Update quantity to two",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/cart/items/{{cart_item_id}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const d=pm.response.json();pm.test(\"Correct cart totals\",()=>{pm.expect(d.total_paise).to.equal(d.items.reduce((s,i)=>s+i.subtotal_paise,0));pm.expect(d.total_quantity).to.equal(d.items.reduce((s,i)=>s+i.quantity,0));d.items.forEach(i=>pm.expect(i.subtotal_paise).to.equal(i.product.price_paise*i.quantity));});if(d.items.length)pm.collectionVariables.set(\"cart_item_id\",d.items[0].id);}",
+                  "pm.test(\"Quantity updated\",()=>pm.expect(pm.response.json().total_quantity).to.equal(2));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "20 Reject zero quantity",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/cart/items/{{cart_item_id}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "21 Reject unavailable size",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/cart/items",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": {{product_id}},\n  \"size\": \"NOT-A-SIZE\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "22 Remove item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/cart/items/{{cart_item_id}}",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+                  "pm.test(\"No response body\",()=>pm.expect(pm.response.text()).to.equal(\"\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "23 Empty cart after removal",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/cart",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const d=pm.response.json();pm.test(\"Correct cart totals\",()=>{pm.expect(d.total_paise).to.equal(d.items.reduce((s,i)=>s+i.subtotal_paise,0));pm.expect(d.total_quantity).to.equal(d.items.reduce((s,i)=>s+i.quantity,0));d.items.forEach(i=>pm.expect(i.subtotal_paise).to.equal(i.product.price_paise*i.quantity));});if(d.items.length)pm.collectionVariables.set(\"cart_item_id\",d.items[0].id);}",
+                  "pm.test(\"Empty cart\",()=>pm.expect(pm.response.json().items).to.have.lengthOf(0));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "24 Reject order from empty cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": "{{base_url}}/api/orders",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "25 Add item for order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/cart/items",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": {{product_id}},\n  \"size\": \"{{size}}\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const d=pm.response.json();pm.test(\"Correct cart totals\",()=>{pm.expect(d.total_paise).to.equal(d.items.reduce((s,i)=>s+i.subtotal_paise,0));pm.expect(d.total_quantity).to.equal(d.items.reduce((s,i)=>s+i.quantity,0));d.items.forEach(i=>pm.expect(i.subtotal_paise).to.equal(i.product.price_paise*i.quantity));});if(d.items.length)pm.collectionVariables.set(\"cart_item_id\",d.items[0].id);}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "26 Create order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{checkout_key}}"
+              }
+            ],
+            "url": "{{base_url}}/api/orders",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"checkout_key\",pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "if(pm.response.code===201){const d=pm.response.json();pm.collectionVariables.set(\"order_id\",d.id);pm.test(\"Pending order and exact total\",()=>{pm.expect(d.status).to.equal(\"pending\");pm.expect(d.total_paise).to.equal(d.items.reduce((s,i)=>s+i.unit_price_paise*i.quantity,0));});}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "27 Retry same checkout key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{checkout_key}}"
+              }
+            ],
+            "url": "{{base_url}}/api/orders",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Same order ID\",()=>pm.expect(String(pm.response.json().id)).to.equal(String(pm.collectionVariables.get(\"order_id\"))));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "28 Cart consumed at order creation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/cart",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const d=pm.response.json();pm.test(\"Correct cart totals\",()=>{pm.expect(d.total_paise).to.equal(d.items.reduce((s,i)=>s+i.subtotal_paise,0));pm.expect(d.total_quantity).to.equal(d.items.reduce((s,i)=>s+i.quantity,0));d.items.forEach(i=>pm.expect(i.subtotal_paise).to.equal(i.product.price_paise*i.quantity));});if(d.items.length)pm.collectionVariables.set(\"cart_item_id\",d.items[0].id);}",
+                  "pm.test(\"Cart empty\",()=>pm.expect(pm.response.json().items).to.have.lengthOf(0));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "29 Order details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/orders/{{order_id}}",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "30 Order history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/orders",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Order is in history\",()=>pm.expect(pm.response.json().some(o=>String(o.id)===String(pm.collectionVariables.get(\"order_id\")))).to.equal(true));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "31 Cancel before payment setup",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/orders/{{order_id}}/cancel",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Cancelled\",()=>pm.expect(pm.response.json().status).to.equal(\"cancelled\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "32 Cancel again safely",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/orders/{{order_id}}/cancel",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Still cancelled\",()=>pm.expect(pm.response.json().status).to.equal(\"cancelled\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "33 Reserved stock restored once",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/products/{{product_id}}",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Original stock restored\",()=>pm.expect(pm.response.json().stock).to.equal(Number(pm.collectionVariables.get(\"stock_before\"))));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "34 Reject unsigned webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/payments/webhook",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "35 Missing order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/orders/2147483647",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Optional Stripe payment workflow (manual)",
+      "item": [
+        {
+          "name": "P1 Add item for payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/cart/items",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": {{product_id}},\n  \"size\": \"{{size}}\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const d=pm.response.json();pm.test(\"Correct cart totals\",()=>{pm.expect(d.total_paise).to.equal(d.items.reduce((s,i)=>s+i.subtotal_paise,0));pm.expect(d.total_quantity).to.equal(d.items.reduce((s,i)=>s+i.quantity,0));d.items.forEach(i=>pm.expect(i.subtotal_paise).to.equal(i.product.price_paise*i.quantity));});if(d.items.length)pm.collectionVariables.set(\"cart_item_id\",d.items[0].id);}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "P2 Create payment order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{payment_checkout_key}}"
+              }
+            ],
+            "url": "{{base_url}}/api/orders",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"payment_checkout_key\",pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "if(pm.response.code===201){const d=pm.response.json();pm.collectionVariables.set(\"order_id\",d.id);pm.test(\"Pending order and exact total\",()=>{pm.expect(d.status).to.equal(\"pending\");pm.expect(d.total_paise).to.equal(d.items.reduce((s,i)=>s+i.unit_price_paise*i.quantity,0));});}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "P3 Create PaymentIntent",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/payments/orders/{{order_id}}/intent",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const d=pm.response.json();pm.collectionVariables.set(\"payment_intent_id\",d.payment_intent_id);pm.test(\"PaymentIntent created\",()=>{pm.expect(d.payment_intent_id).to.match(/^pi_/);pm.expect(d.publishable_key).to.match(/^pk_test_/);});}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "P4 Reuse PaymentIntent",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/payments/orders/{{order_id}}/intent",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Same PaymentIntent\",()=>pm.expect(pm.response.json().payment_intent_id).to.equal(pm.collectionVariables.get(\"payment_intent_id\")));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "P5 Inspect order after CLI payment or cancellation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/orders/{{order_id}}",
+            "description": "After P4 use Stripe CLI to confirm or cancel the recorded payment_intent_id, with the listener running. This request does not assume paid status before confirmation."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    }
+  ]
+}
